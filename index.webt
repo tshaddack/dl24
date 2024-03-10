@@ -1,0 +1,456 @@
+$TITLE: DL24.py, python control for DL24P and other Atorch artificial loads
+$IDXNAME: DL24.py, python control for DL24P and other Atorch artificial loads
+$IDXDESC: software for control of Atorch DL24P artificial load and some others
+$DATE: 2024-02-20
+
+^^@|thumb.ATorchDL24P-adhoc.jpg
+== Why
+It was necessary to control an Atorch DL24P constant-current load for some lab automation purposes.
+The stock software was useless for the purpose, surprise surprise.
+
+There is a fragmentary documentation of the protocol online, all over the Internet and over various
+code implementations of varying completeness.
+
+The device communicates over a standard UART at 9600 bps, no parity, 1 stopbit (the most common setting),
+using a custom packet-based protocol.
+
+The serial bus can be accessed over either a USB-serial converter based on CH340G chip (warning: no
+galvanic isolation!), or via Bluetooth serial interface, using a /dev/rfcommX port. Addition of
+wifi-accessible serial interface is also possible, using eg. the expedient plain
+[[P|hw_SerialOverTCP|serial-over-TCP]] ("TasmoCOM") solution was chosen, leveraging ESP8266
+and [[w|Tasmota]], a proven cheap and opensource approach.
+
+The code is a variant on the control system for [[P|sw_rd60|RD60]], Riden RD60xx and RK60xx power supplies.
+
+#For the hardware, see [[P|hw_RD6024powersupply]].
+
+Tested with:
+* DL24P
+
+== Hardware description
+
+=== load modes
+The device nominally supports several different load modes:
+* CC - constant current, sinking preset current despite input voltage fluctuations
+* CR - constant resistance, behaving like a preset-value resistor, decreasing load with falling voltage
+* CP - constant power, increasing load with falling voltage
+* CV - constant voltage, maintaining voltage over the load
+
+Only the CC mode is fully supported. The protocol does not allow selecting other modes, changing values for them,
+nor even querying what mode is set.
+
+The hardware in its current (2023) version looks like just slightly modified AC/DC power consumption measuring
+device, with load control tacked on it. For sensing, separate dedicated load-measuring chips are used, and the
+microcontroller communicated with them via internal UART bus. The Rx/Tx comm is naturally abysmally slow, dooming
+any closed-loop regulation involving CPU to be abysmally unstable and often useless with more dynamic source.
+
+The load itself is realized as a big MOSFET on an even bigger actively cooled heatsink, likely a surplus for
+older CPUs. The MOSFET gate is fed with voltage from an op-amp, comparing signal from a current-sensing resistor
+with a reference voltage coming from a RC-filtered PWM from the controller. This is a pretty good closed-loop
+regulation, bog-standard approach with minimal demands on the CPU; in a pinch, a potentiometer can be used
+for setting the reference.
+
+The advantage of using dedicated power consumption sensing chips is more reliable integration of the
+consumed energy. Which is useful for the device's primary purpose - testing batteries. For this use,
+the device has a voltage cutoff preset.
+
+=== hardware architecture
+* [[a|DL24P-loadtester-schematic.pdf|schematics (PDF)]] (thanks to Someone Unknown somewhere on the Internet)
+
+The device is built around several chips:
+* control, user interface
+** HC32F030E8PA, Arm Cortex M0+ microcontroller, 64k flash/8k RAM (possibly, chip top is sanded off)
+** color TFT LCD SPI display
+
+* communication
+** CH340G USB-UART converter, non-isolated
+** bluetooth module, type can be JDY-23 (CC2541) or some SOIC8 single-chip Bluetooth-serial from JieLi, likely AC6329A or AC6328A, on the board on hand labeled BP05235-29A1
+
+* data acquisition
+** RN8209C, a utility smart meter power consumption integrator
+*** three sigma-delta ADCs, fully differential
+*** read via internal UART at fixed 4800 bps
+**** current sensing resistor on channel A, using internal amplifier
+**** voltage sensing on channel C, using resistive divider
+**** external 10k NTC as temperature probe on channel B
+
+* power control
+** two LM321 in SOT23-5 case marked A63A
+** STPS41H100CG, double Schottky diode in series with the MOSFET, to protect it from reverse load
+** IRFP260, a power N-MOSFET
+
+The MOSFET is a switching one, abused here in linear duty. Word goes along that some sellers use fake or reused ones,
+and this component dies often. Prepare to replace it.
+
+The UART has pins available near the Bluetooth chip, left to right:
+* GND (bluetooth chip pin 3)
+* Rx (bluetooth chip Tx, pin 8)
+* Tx (bluetooth chip Rx, pin 7)
+* 3.3V (bluetooth chip pin 1)
+This is a tentative place to hook up the wifi serial module.
+
+==== connectors
+On the left side there is a 4-pin screw clamp, for attaching source (outer pins) and source sensing (inner pins).
+Either use a [[w|Kelvin connection]] or connect pins 1 to 2 and 3 to 4 and neglect the (often significant) voltage drop on the cables.
+
+On the right side there is a 5.5/2.1mm barrel jack, connected in parallel to the source pins. Do not mistake for the other connector on the back.
+An adapter with a barrel jack and USB-mini, USB-micro and USB-C connector is often available.
+
+On the right side there is also the microUSB connector with USB-UART CH340G interface.
+
+On the back side there is one 5.5/2.1mm barrel jack for a 9-to-12v power supply. This one feeds the internal electronics (fan, op-amps,
+3.3v linear regulator).
+
+==== buttons
+The unit has four buttons in a diamond layout.
+* top: SETTING
+** short press selects next item (cursor in the Is (set current) field, fields in setting mode
+** long press allows selecting mode and accessing other variables - Vcut, timer...
+* left: MINUS
+** decreases value under cursor
+* right: PLUS
+** increases value under cursor
+** long press of MINUS and PLUS together 
+* bottom: START
+** short press switches the load on or off
+** long press in OFF mode accesses settings menu (language, calibration, power limit...)
+
+== How
+[[c|dl24.py]], a python-based (for portability) script, was written. The software allows both
+using a tty-style port and a raw TCP socket, with no fancy RFC2217 support. If the latter is needed, URI-style
+pyserial syntax is available with the port.
+
+The software defines a hierarchy of classes:
+* [[c|class LowLevelSerPort]] - for wired /dev/ttyX ports or full virtual ports
+* [[c|class LowLevelTcpPort]] - for raw TCP sockets, TasmoCOM style
+* [[c|class Instr_Atorch]] - functions specific for the DL24P and other Atorch devices, protocol, commands
+* [[c|class PowerLoad]] - command interpreter, configfile reader
+
+
+
+=== dependencies
+The software tries to minimize dependencies.
+
+The mandatory ones, and mostly standard ones, are:
+* [[c|socket]] (for TCP communication)
+* [[c|time]] (for sleep)
+* [[c|select]] (for nonblocking stdin reads)
+* [[c|struct]] (pack/unpack, for conversion of packets to/from byte stream)
+The nonmandatory, imported only as needed (so the process would run when a missing dependency is not required), are:
+* [[c|serial]] (pyserial, for serial ports)
+* [[c|datetime]] (for date/time settings)
+* [[c|json]] (for JSON format output)
+
+
+=== protocol
+The device communicates over a bidirectional serial stream. There seem to be two different protocols, mixed together:
+* PX100 or PX-100, older, with fixed prefix and suffix and a prayer for data integrity
+* a newer one, let's call it "Atorch", with fixed prefix and a checksum
+
+==== PX100 protocol
+Challenge-response, master-slave protocol. The device listens and only reacts to the data sent.
+* [[a|https://github.com/misdoro/Electronic_load_px100/blob/master/protocol_PX-100_2_70.md]]
+
+#PRE
+ request packet format:
+
+        0xB1 0xB2 [cmd] [d1] [d2] 0xB6
+ on/off             01   xx   00       xx=01 for on, 00 for off
+ set current        02   xx   yy       xx=integer, yy=decimal (00..99d)
+ set cutoff v       03   xx   yy       ""
+ set timeout        04   xx   yy       xxyy as unsigned int in seconds
+ reset counters     05   00   00
+
+ command response format: a single byte, 0x6F (PROTO_SHORTACK)
+
+ query response:
+                  0xCA 0xCB [d1] [d2] [d3] 0xCE 0xCF
+             for cmd code
+ load enabled      10        00   00   xx          xx=00 (off) or 01 (on)
+ measured mV       11        xx   yy   zz          0xXXYYZZ, 24bit integer
+ measured mA       12        xx   yy   zz
+ timer value       13        hh   mm   ss
+ cap mAh           14        xx   yy   zz
+ cap mWh           15        xx   yy   zz
+ mosfet 'c         16        xx   yy   zz
+ preset current    17        xx   yy   zz          10s mA
+ preset cutoff     18        xx   yy   zz          10s mV
+ preset timer      19        hh   mm   ss
+
+ [cmd] code ranges 0x0? for command (with short response) and query (with long 7-byte response)
+
+ On invalid command there is no response, the command timeouts.
+#/PRE
+
+
+==== "Atorch" protocol
+More modern protocol, combining fixed-format status updates in one-second intervals and challenge-response commands
+* [[a|https://github.com/devanlai/webvoltmeter/blob/master/REVERSE.md]]
+* [[a|https://github.com/syssi/esphome-atorch-dl24/blob/main/docs/protocol-design.md]]
+* [[a|https://werner.rothschopf.net/microcontroller/202204_atorch_dt24hd_power_sensor_en.htm]] - incl. parser decompiled from app
+* [[a|https://www.ordinoscope.net/index.php/Electronique/Hardware/Outils/Atorch/DL24P]]
+
+The packets have a fixed overall structure with variable length:
+* [[c|0xFF 0x55]] - a fixed prefix, magic number
+* [[c|type]] - packet type
+** [[c|0x01]] - periodic message, slave to master, 36 bytes total
+** [[c|0x02]] - reply to request, slave to master, 8 bytes total
+** [[c|0x11]] - request, master to slave, 10 bytes total
+* [[c|ADU]] - device type
+** [[c|0x01]] - AC power consumption meter
+** [[c|0x02]] - DC power consumption meter or artificial load; use for DL24
+** [[c|0x03]] - DC power consumption meter for USB power analyzers/monitors
+* [[c|payload]] - variable length and content
+** type 0x01: 31 bytes
+** type 0x02: 3 bytes
+** type 0x03: 5 bytes
+* [[c|checksum]] - one byte, sum of bytes from (incl.) type to end of payload
+** byte by byte entire packet minus first two and one last bytes, AND 0xFF, XOR 0x44
+** use result for outgoing requests, check last byte for match for incoming messages
+
+#PRE
+ Atorch protocol, type 0x01: 1-per-second, 36-byte: (pfct=power factor, bk=backlight)
+                   x4               x8               xc               x10               x14               x18              x1c              x20
+                   4                8                12               16                20                24               28               32
+ [FF][55][01][02] [00][00][00] [00][00][00] [00][00][12] [00][00][00][00] [00][00][00] [00][00] [00][00] [00][17][00][00] [0A][33][3c][00] [00][00][00][E1]
+ [FF][55][01][02] [00][00][33] [00][00][00] [00][00][12] [00][00][00][00] [00][00][00] [00][00] [00][00] [00][17][00][00] [0A][33][3c][00] [00][00][00][9C]
+          t   01  -volt*0.1?-  -milliamps-  ---power---  ----energy-----   --price?--   -freq-   -pfct-   -temp-                   bk
+          t   02  -volt*0.1--  -milliamps-  -amphours--  ----energy-----   --price?--            -pfct-   -temp-  --hhhh---mm--ss  bk
+          t   03  -volt*0.1?-  -milliamps-  -amphours--  ----energy-----    usbd+   usbd-   -temp-   --hhhh---mm--ss  bk
+             ADU      0.1v       0.001a       0.01Ah
+
+
+ type 0x02, reply:
+ [FF][55][02] [val0][val1][val2][val3] [checksum]
+ for a good command (0x32, button) the response is 01 01 00 00
+ for a bad command (0x36) the response is 01 03 00 00
+ 01 01 seems to be good command
+ 01 03 seems to be unimplemented command
+
+ sample push of ON/OFF button: (cmd=0x32, values=[0,0,0,0])
+ SEND: ff:55:11:02: 32 :00:00:00:00 :01
+ RECV: ff:55:02: 01:01:00:00 :40
+
+
+ type 0x11, request:
+ [FF][55][11][ADU] [cmd] [val0][val1][val2][val3] [checksum]  - val1 seems to be always 0x00
+
+ sample requests, as by http://bukys.eu/project/powermon/start :
+
+   Commands for UD18 UD24 (USB)
+     WH reset            FF 55 11 03 01 00 00 00 00 51
+     AH reset            FF 55 11 03 02 00 00 00 00 52
+     TIME reset          FF 55 11 03 03 00 00 00 00 53
+     ALL reset           FF 55 11 03 05 00 00 00 00 5d
+     SETUP Button        FF 55 11 03 31 00 00 00 00 01
+     ENTER Button        FF 55 11 03 32 00 00 00 00 02
+     [+] Button          FF 55 11 03 33 00 00 00 00 03
+     [-] Button          FF 55 11 03 34 00 00 00 00 0C
+
+  Commands for S1-B (USB)
+     WH reset            FF 55 11 03 01 00 00 00 00 51
+     Internal relay      FF 55 11 03 02 00 00 00 00 52
+     TIME reset          FF 55 11 03 03 00 00 00 00 53
+#/PRE
+
+==== transaction examples
+using protocol reverse engineering commands with [[c|VERB:CM]]
+#PRE
+ CMD: RAWPX100:30
+ SEND: b1:b2:30:00:00:b6
+ REPLY TIMEOUT
+ SEND: b1:b2:30:00:00:b6
+ REPLY TIMEOUT
+ SEND: b1:b2:30:00:00:b6
+ REPLY TIMEOUT
+
+ CMD: RAWPX100:01
+ SEND: b1:b2:01:00:00:b6
+ RECV: 6f
+
+ CMD: RAWPX100:10
+ SEND: b1:b2:10:00:00:b6
+ RECV: ca:cb:00:00:00:ce:cf
+
+ CMD: RAWPROTO:32
+ SEND: ff:55:11:02:32:00:00:00:00:01
+ RECV: ff:55:02:01:01:00:00:40
+
+ CMD: RAWPROTO:FF
+ SEND: ff:55:11:02:ff:00:00:00:00:56
+ RECV: ff:55:02:01:03:00:00:42
+#/PRE
+
+== Usage
+#INCLUDEPRE help.txt
+
+=== hardware configuration
+The host:port or serport:baudrate are saved in ~/.dl24.cfg (or other name, where filename is derived from
+the command by stripping the .py suffix and prefixing a home directory and a dot). This variability allows
+to use several symlinks for different power supplies simultaneously used, eg. as dl24a, dl24b,...
+
+The configfile template can be generated on demand by command [[c|CFGFILE]].
+
+Directly, the devices may be specified as [[c|TCP=<host>[:port] ]] or [[c|PORT=/dev/ttyUSBx@baudrate]],
+eg. [[c|TCP=10.0.1.15:8888]] or [[c|PORT=/dev/rfcomm0]] or [[c|PORT=/dev/ttyUSB1]] (default speed is 9600, cannot be changed).
+
+The PORT directive, both in command and in config, also supports the [[a|https://pyserial.readthedocs.io/en/latest/url_handlers.html|URL form]].
+
+For [[c|/dev/rfcomm]] devices used with Bluetooth, a [[w|wait]] directive is needed. The port takes its
+precious time to initialize, and waiting for first incoming data packet prevents initial timeouts.
+
+=== commands
+The script takes a sequence of commands from commandline, separated by spaces. Each command is a single token,
+optionally containing separator characters.
+
+The commands can be a fixed string ([[c|STATE]], [[c|QV]], ...) or a prefix with value, or value with suffix (12.5[[c|A]],
+[[c|SLEEP]]1.5, [[c|Q]]VCUT...)
+
+Q-commands can be used to directly access the measured or set values:
+* [[c|QV]], [[c|QA]] - for querying output voltage/amperage
+* [[c|QMV]], [[c|QMA]] - same, but integer value in millivolts/milliamps instead of float, for bash comparisons
+
+
+=== settings
+The load current and voltage cutoff can be set with suffix-based commands.
+For the value of 1.23, the commands are
+* [[c|1.23A]] - set load current
+* [[c|1230MA]] - set load current in milliamps
+* [[c|1.23VCUT]] - set voltage cutoff
+* [[c|+1.23A]] - increase load current
+* [[c|-1.23A]] - decrease load current
+* [[c|+1230MA]] - increase load current in milliamps
+
+Voltage cutoff does not support relative values, absolute shall be used.
+
+=== miniscripts
+The commands are executed in order.
+
+* set voltage cutoff and current, enable output
+** [[c|dl24.py 10.5vcut 550ma on]]
+* toggle output, wait half second, show state
+** [[c|dl24.py toggle sleep0.5 state]]
+* set output to 5 amps and enable, wait a second, increase by an amo, wait a second, increase by another two amps, show state and power off
+** [[c|dl24.py on 5a sleep1 +1a sleep1 +2a sleep0.5 state off]]
+* show input voltage and current
+** [[c|dl24.py qv qa]]
+* show input voltage in millivolts and current in milliamps, space-separated
+** [[c|dl24.py qmv qma | tr '\n' ' ']]
+* disable output, set cutoff voltage and current, enable output
+** [[c|dl24.py off 4.9vcut 1250ma on]]
+
+==== loops
+The [[c|LOOP:]] statement can be used for repeating of commands. The subsequent command set is repeated forever, or for specified number of times.
+
+* show status in JSON format, forever
+** [[c|dl24.py loop: jstate]]
+* ramp current by 20mA over time, from 0 to 1A, watch status with timestamps:
+** [[c|dl24.py 0a on loop:50 +20ma sleep1 stat:jt]]
+
+==== stdin
+The commands can be sent from another script, via stdin. The [[c|STDIN]] statement has to be the last on the command line, everything after it is ignored.
+* enable output, take file with currents, send in one per second, then disable output
+** [[c|cat file.txt | while read x; do echo $x; sleep 1; done | ./dl24.py on stdin; ./dl24.py off]]
+
+==== data on one line
+The [[c|LINE]] command sets the separator character between Q-values from default newline to a space. Groups of values then can be sent as single lines.
+* check every 5 seconds, send millivolts, milliamps, integrated amp-hours and watt-hours
+** [[c|dl24.py line loop: qmv qma qah qwh sleep5]]
+
+==== connection persistence
+The connection to the port is opened when first needed, then kept open until the process closes.
+
+In some cases this may be detrimental to reliability (connection fail crashes the process). Running it anew each time may be beneficial then.
+
+
+=== verbosity
+To see the port/socket opening/closing, and the bus transactions dumped in hex, use [[c|VERB]] as the first command.
+
+.> ./dl24.py verb:pc state
+#PRE
+CONFIGFILE:filename: /root/.dl24.cfg
+CONFIGFILE:FAIL: [Errno 2] No such file or directory: '/root/.dl24.cfg'
+SERPORT:connecting to /dev/rfcomm0 @ 9600
+SERPORT:connected
+waiting for incoming data
+RECV: ff:55:01:02:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:17:00:00:00:04:3c:00:00:00:00:1e
+SEND: b1:b2:10:00:00:b6
+RECV: ca:cb:00:00:01:ce:cf
+SEND: b1:b2:11:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:12:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:14:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:15:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:17:00:00:b6
+RECV: ca:cb:00:00:63:ce:cf
+SEND: b1:b2:18:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:16:00:00:b6
+RECV: ca:cb:00:00:17:ce:cf
+{'out': 1, 'V': 0.0, 'A': 0.0, 'Ah': 0.0, 'Wh': 0.0, 'Iset': 0.99, 'Vcut': 0.0, 'temp': 23}
+SERPORT:closed
+#/PRE
+
+=== temperatures
+The board has a connector for an external NTC probe temperature. The firmware does not support querying it as of late 2023.
+
+
+=== autoconfiguration
+There is no way to query the specific device type.
+There is a hint in the protocol, the ADU field in the status packet. It can have different values describing the
+packet format, the field meanings; [[c|1]] is for AC sensors, [[c|2]] for DC sensors, [[c|3]] for USB DC sensors.
+
+The [[c|TYPE]] command will show this value.
+
+DT24 devices are of type 2.
+
+
+=== debug
+The verbose mode, [[c|VERB]], provides access to several kinds of data:
+* verb:[[c|P]] for port-related behavior (open/close)
+* verb:[[c|C]] for communication data
+* verb:[[c|D]] for data flow (less verbose comm)
+* verb:[[c|M]] for coMmands
+
+==== protocol reverse engineering aids
+For understanding the current, and checking the future. Best used with [[c|VERB:PCM]] to see the response.
+* [[c|RAWPROTO:XXXXXXXXXX]] - send raw bytes via Atorch protocol, command + 4 payloads in hex, auto-pads with zeroes
+* [[c|RAWPX100:XXXXXX]] - send raw bytes via PX100 protocol, command + 2 payloads in hex, auto-pads with zeroes
+* [[c|RAWSEND:XX....]] - send raw bytes directly to port
+* [[c|NORETRY]] - do not retry timeouted commands, for PX100 protocol to speed up reaction and reduce clutter
+
+Example of [[c|RAWSEND]] to elicit response from a UM34C power monitor (protocol (described at [[a|https://sigrok.org/wiki/RDTech_UM_series|Sigrok wiki]]
+unsupported by this software, hence the discard: messages on the response). 0xF0 requests the data packet.
+#PRE
+CMD: VERB:PCM
+CMD: RAWSEND:F0
+SEND: f0
+RECV: 0d:4c:01:f8:00:a5:00:00:03:3f:00:18:00:4c:00:00
+discard: 0d 4c 01 f8 00 a5 00 00 03 3f 00 18 00 4c 00 00
+RECV: 00:00:21:6f:00:00:a7:a9:00:01:70:0b:00:07:34:e2:00:01:86:9f:00:0c:2c:22:00:00:07:3d:00:00:22:e2:00:00:00:00:00:00:00:00:00:00:00:00
+discard: 00 00 21 6f 00 00 a7 a9 00 01 70 0b 00 07 34 e2 00 01 86 9f 00 0c 2c 22 00 00 07 3d 00 00 22 e2 00 00 00 00 00 00 00 00 00 00 00 00
+RECV: 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:01:00:00:00:08:00:00:04:2c:00:00:14:d4:00:00:4d:ef:00:01:87:d9:00:75:00:75:00:08:00:00:21:6f
+discard: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 08 00 00 04 2c 00 00 14 d4 00 00 4d ef 00 01 87 d9 00 75 00 75 00 08 00 00 21 6f
+RECV: 00:00:a7:a9:00:02:00:01:6a:41:00:01:00:00:00:04:00:00:01:31:00:00:97:07
+discard: 00 00 a7 a9 00 02 00 01 6a 41 00 01 00 00 00 04 00 00 01 31 00 00 97 07
+REPLY TIMEOUT
+#/PRE
+
+
+== Files
+* <b>[[F|dl24.py]]</b> - code itself
+
+
+== TODO
+* better windows compatibility
+* tests on some USB power meters
+* better pictures
+* [[w|Standard Commands for Programmable Instruments|SCPI]] emulation/gateway
+* hardware mods
+** more robust MOSFET, reverse-protection diodes
+** MOSFET gate protection with zener/transil
+** isolated 5-12v converter for powering from standard 5v usb, galvanically isolated from the rest
+** maybe galv isolation of the USB, like RD60xx have; unlike that one, a pair of lousy optocouplers will do here as 9k6 is slow
