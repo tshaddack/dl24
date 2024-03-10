@@ -114,6 +114,10 @@ class LowLevelTcpPort:
   connretries=5
   connected=False
 
+  reconnect=True
+  default_timeout=5 # reconnect timeout for data loss
+  time_lastread=-1
+
   buf=None
 
   def __init__(self,addr,port):
@@ -126,27 +130,32 @@ class LowLevelTcpPort:
     self.sock.settimeout(self.timeout)
     for t in range(0,self.connretries):
       try:
-        if t>0: print('retrying...',t)
+        if t>0: print('SOCK:connection retrying...',t,file=stdlog)
         self.sock.connect( (self.ipaddr,self.ipport) )
         self.connected=True
         break
       except Exception as e:
         print('SOCKCONNERR:',e)
-        sleep(0.5)
+        sleep(min(0.5+t,5)) # increase retries delay, max. 5s
     if not self.connected:
       print('ERRSOCKCONN: cannot connect to',self.ipaddr,':',self.ipport,'- too many retries. Aborting.',file=stdlog)
       exit(12)
     self.sock.setblocking(False) # nonblocking
     if self.verbconn: print('SOCK:connected',file=stdlog)
+    self.time_lastread=monotonic()
     return self.sock
 
   def close(self):
     if self.verbconn: print('SOCK:closed',file=stdlog)
     self.sock.close()
 
+
   def send(self,raw,showpacket=None):
     if showpacket!=None and self.verbport: showpacket(raw,name='SOCK:SEND',check=False,file=stdlog)
-    return self.sock.sendall(raw)
+    try:  return self.sock.sendall(raw)
+    except socket.error as e:
+      print('SOCK:SEND:ERR:',e,file=stderr)
+      if self.reconnect: self.connect()
 
 # WARN: ignores l
   def recv(self,l,showpacket=None):
@@ -169,8 +178,16 @@ class LowLevelTcpPort:
     try: self.buf=self.sock.recv(256)
     except socket.error as e:
       err=e.args[0]
-      if err == errno.EAGAIN or err == errno.EWOULDBLOCK: return 0
-      print('ERR:',e,file=stderr)
+      if err == errno.EAGAIN or err == errno.EWOULDBLOCK:
+        if monotonic()-self.time_lastread>self.default_timeout:
+          print('SOCK:RECV:TIMEOUT',file=stderr)
+          try: self.close()
+          except Exception as e: print('SOCK:CLOSE:ERR:',e,file=stderr)
+          self.connect()
+        return 0
+      print('SOCK:RECV:ERR:',e,file=stderr)
+      if self.reconnect: self.connect()
+    self.time_lastread=monotonic()
     return len(self.buf)
 
 
@@ -212,8 +229,11 @@ class Instr_Atorch:
 
   retries=3 # command send retries, low level
   retriescmd=3 # setting command retries
-  waitretries=20 # response wait retries
+#  waitretries=20 # response wait retries
+  waitretries=50 # response wait retries
   retrydelay=0.05 # response wait
+
+  default_minimize=True  # True for wireless, False for wired
 
 
   expectshort=False   # expect short single-byte reply confirmation
@@ -317,6 +337,12 @@ class Instr_Atorch:
     sum=self.atorch_get_crc(data[2:-1])
     #print('[',sum,']')
     if sum==data[-1]: return True;return False
+
+
+
+# Bluetooth initialization:
+# AT+BMDL24_BLE
+
 
 
 # https://github.com/devanlai/webvoltmeter/blob/master/REVERSE.md
@@ -477,6 +503,7 @@ class Instr_Atorch:
 
 
   def waitreply(self,expectshort=False,retries=0):
+    #if retries<1: retries=self.waitretries
     if retries<1: retries=self.waitretries
     for t in range(0,retries):
       sleep(self.retrydelay)
@@ -498,7 +525,7 @@ class Instr_Atorch:
       sleep(self.retrydelay)
       self.clearbuf()
       self.comm.send(packet)
-      if self.waitreply(expectshort=(cmd<0x10)): return True
+      if self.waitreply(expectshort=(cmd<0x10), retries=self.waitretries*(t+1)): return True
     return False
 
   def send_atorch_raw(self,cmd,d=[0,0,0,0]): # second byte, d[1], seems to always be 0
@@ -579,15 +606,24 @@ class Instr_Atorch:
     return self.px100_query(self.CMD_GETTEMP,id='temp')
 
   def cmd_button(self,butt):
-    res=self.send_atorch_raw(butt,d=[0,0,0,0])
+    return self.send_atorch_raw(butt,d=[0,0,0,0])
 
 
-  def cmd_readstate(self,energy=True,limits=True,temp=True,timestr=None):
+  def cmd_readstate(self,energy=True,limits=True,temp=True,timestr=None,short=True,listenonly=False):
+    #return self.state
     a={}
+
     if timestr!=None: a['time']=timestr
-    a['out']=self.cmd_getonoff()
-    self.out=a['out']
+    if not listenonly:
+      a['out']=self.cmd_getonoff()
+      self.out=a['out']
+
+    a.update(self.state)
+    if listenonly: return a
+
     a['V']=self.cmd_getvolt()
+    if short: return a
+
     a['A']=self.cmd_getamp()
     if energy:
       a['Ah']=self.cmd_getah()
@@ -597,7 +633,6 @@ class Instr_Atorch:
       a['Vcut']=self.cmd_getsetcutoff()
     if temp:
       a['temp']=self.cmd_gettemp()
-    #print(a)
     return a
 
 
@@ -659,7 +694,7 @@ class Instr_Atorch:
   statopts=''
   def printstate(self,opts='',help=False):
     if help:
-      print('          opts:  J=JSON, S=short (V/A only), T=show time, U=show UTC time, B=force battery');return
+      print('          opts:  J=JSON, S=short (V/A only), T=show time, U=show UTC time, A=show all, B=force battery, M=minimize queries, L=listen-only');return
     opts=opts.upper()
     if opts=='': opts=self.statopts
     else: self.statopts=opts
@@ -669,17 +704,22 @@ class Instr_Atorch:
     showtime=False
     showtimeutc=False
     json=False
-    if 'S' in opts: energy=False;limits=False;temp=False
+    listenonly=False
+    minimize=True
+    if 'S' in opts: energy=False;limits=False;temp=False;minimize=False
+    if 'A' in opts: energy=True;limits=True;temp=True;minimize=False
     if 'B' in opts: energy=True
     if 'T' in opts: showtime=True
     if 'U' in opts: showtimeutc=True;showtime=True
     if 'J' in opts: json=True
+    if 'L' in opts: listenonly=True
+    if 'M' in opts: minimize=True
     timestr=None
     if showtime:
       from datetime import datetime
       if showtimeutc: timestr=datetime.utcnow().isoformat()[:23]
       else: timestr=datetime.now().isoformat()[:23]
-    a=self.cmd_readstate(energy=energy,limits=limits,temp=temp,timestr=timestr)
+    a=self.cmd_readstate(energy=energy,limits=limits,temp=temp,timestr=timestr,short=minimize,listenonly=listenonly)
     if json:
       from json import dumps
       print(dumps(a))
@@ -857,13 +897,14 @@ class PowerLoad:
       #self.instr.bat=True
 
     elif cmd=='LISTEN':
-      if help: print('  LISTEN[:count]  listen to status reports, query data, handle stdin')
-      if help: print('  LISTEN[:off]    listen, until off');return False
+      if help: print('  LISTEN[:opts[:count]]  listen to status reports, query data, handle stdin')
+      if help: print('  LISTEN[:opts[:off]]    listen, until off')
+      if help: self.instr.printstate(help=True);return False
       stopoff=False;cnt=-1
-      if cmdarr[1]=='': pass
-      elif cmdarr[1].upper()=='OFF': stopoff=True
+      if cmdarr[2]=='': pass
+      elif cmdarr[2].upper()=='OFF': stopoff=True
       else:
-        try: cnt=int(cmdarr[1])
+        try: cnt=int(cmdarr[2])
         except: print('[Unknown count:',cmdorig,']');return False
         if cmdarr[2].upper()=='OFF': stopoff=True
       if not dryrun:
@@ -877,9 +918,10 @@ class PowerLoad:
           self.instr.recvdata()
           if self.instr.gotupdate():
             #print(self.instr.state,self.instr.cmd_readstate())
-            d=self.instr.state.copy()
-            d.update(self.instr.cmd_readstate())
-            print(d)
+            #d=self.instr.state.copy()
+            #d.update(self.instr.cmd_readstate())
+            #print(d)
+            self.instr.printstate(opts=cmdarr[1])
             if singlelisten: break
             cnt-=1
             if cnt==0: break
@@ -930,7 +972,7 @@ class PowerLoad:
       if help: print('  LOOP:[xx]      loop for xx time or endless if not specified');return False
       no=cmdarr[1]
       if no!='':
-        try: n=int(no)
+        try: int(no)
         except: print('[Unknown loops count:',cmd,' seen as "'+no+'" ]');return False
 
     # show device type
@@ -946,7 +988,7 @@ class PowerLoad:
       elif butt=='-': b=self.instr.BUTTON_MINUS
       elif butt=='S': b=self.instr.BUTTON_SETUP
       elif butt=='O': b=self.instr.BUTTON_ONOFF
-      else: print('[Unknown button code:'+cmdraw+' ]');return False
+      else: print('[Unknown button code:'+cmdorig+' ]');return False
       if not dryrun: self.instr.cmd_button(b)
 
     elif cmd=='RAWPROTO':
@@ -1137,10 +1179,12 @@ class PowerLoad:
       port=self.conf['serport']
       baud=DEFAULT_BAUDRATE if 'baudrate' not in self.conf else self.cfgint(self.conf['baudrate'],default=DEFAULT_BAUDRATE)
       self.instr.initport(LowLevelSerPort(port,baud))
+      self.default_minimize=False
     elif 'host' in self.conf:
       host=self.conf['host']
       port=DEFAULT_TCPPORT if 'port' not in self.conf else self.cfgint(self.conf['port'],default=DEFAULT_TCPPORT)
       self.instr.initport(LowLevelTcpPort(host,port))
+      self.default_minimize=True
     else:
       print('ERROR: unknown serial port or TCP host',file=stderr)
       print('Use TCP=<host>[:port] or PORT=[/dev/tty...]',file=stderr)
