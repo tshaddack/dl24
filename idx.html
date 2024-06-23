@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="pragma" content="no-cache; charset=utf-8" />
+<meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DL24.py, python control for DL24P and other Atorch artificial loads</title>
+<style type="text/css">
+
+body {background-color:#FFFFDD}
+
+//td {vertical-align:top;padding:0px;margin:0px}
+p {text-align:justify;margin-bottom:0px}
+td.gchord {font-size:75%;font-weight:bold;padding:0px;margin:0px;padding-top:0px;padding-right:3px;text-align:left;font-family:verdana,arial;color:#888888;position:relative;top:3px}
+td.gtxt {text-align:left}
+.dettitle {border-bottom:1px lightgray dashed}
+.dettitle2 {border-bottom:1px lightgray dashed}
+
+h2 {margin-top:20px; background-color:xgray}
+h3 {background-color:xyellow;margin-top:30px;text-decoration:underline}
+h4 {padding-left:0px;margin-left:0px;text-decoration:underline;color:#333333}
+ul {margin-top:0px;padding-top:0px}
+.ref {color:gray}
+
+.gr {color:gray}
+.grsm {color:gray;font-size:80%}
+.err {color:red;font-weight:bold}
+
+a {text-color:blue;text-decoration:underline}
+a:HOVER {border-bottom:1px blue;color:red}
+a.index {text-decoration:none}
+a.index:HOVER {text-decoration:underline;color:red}
+
+.preFile {background-color:lightgray;padding:0.5em}
+
+td.imgthumb {vertical-align:top;padding:5px;font-size:80%}
+img.ico {width:12px;height:12px;overflow:visible;position:relative;margin-top:-5px}
+.imginc {max-width:100%;max-height:80vh}
+.imginccap {text-align:left;padding-bottom:0.5em}
+
+div.code {margin:0px;padding:0px;padding-left:30px;}
+.code {font-family:courier,fixed;color:green;}
+
+.cmd {font-family:courier,fixed;color:red;background-color:#FFEEDD;font-weight:bold;white-space:pre-wrap;padding-left:0.5em;;padding-right:0.5em;padding-top:0.5em;padding-bottom:0.5em}
+.cmd::first-line {color:darkred;}
+.cmd::before {content:'> ';}
+
+.cmdresp {font-family:courier,fixed;color:blue;background-color:#EEEEFF;white-space:pre-wrap;padding-left:0.5em;;padding-right:0.5em;}
+.cmdresp::first-line {color:darkblue;}
+.cmdresp::before {content:'  ';}
+
+.comm {font-family:courier,fixed;color:red;background-color:#FFEEDD;font-weight:bold;white-space:pre-wrap;padding-left:0.5em;;padding-right:0.5em;}
+.comm::first-line {color:darkred;}
+.comm::before {content:'> ';}
+
+.commresp {font-family:courier,fixed;color:blue;background-color:#EEEEFF;white-space:pre-wrap;padding-left:0.5em;;padding-right:0.5em;}
+.commresp::first-line {color:darkblue;}
+.commresp::before {content:'< ';}
+
+.bang {font-weight:bold;color:red}
+
+
+// unsupported by everything except apple, so far
+//@media screen and (inverted-colors: inverted) {
+//.cmd {background-color:#0000CC;color:lightblue;}
+//.cmd::first-line: {color:blue}
+//.cmdresp {background-color:#CC0000;color:lightred}
+//.cmdresp::first-line: {color:red}
+//}
+
+
+@media print{
+body {font-size:80%}
+.noprint {display:none;visibility:hidden}
+.xnopbr {page-break-inside:avoid}
+td.gchord: {color:black}
+.nopbr {}
+.preFile {background-color:white;border:1px dotted black}
+}
+</style>
+<meta property="og:title" content="DL24.py, python control for DL24P and other Atorch artificial loads" />
+<meta property="og:type" content="website" />
+<meta property="og:x-url" content="http://:" />
+<meta property="og:description" content="software for control of Atorch DL24P artificial load and some others" />
+<meta property="og:image" content="http://thumb.ATorchDL24P-adhoc.jpg" />
+</head>
+<body>
+<h1>DL24.py, python control for DL24P and other Atorch artificial loads</h1><hr class="noprint" /><div class="noprint"><img src="thumb.ATorchDL24P-adhoc.jpg" width="320" height="427" align="right" style="padding-left:20px" />
+</a>
+<a class="index indexlev2" href="#Why" title="">Why</a><br /><a class="index indexlev2" href="#Hardwaredescription" title="Hardware description">Hardware description</a><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#loadmodes" title="Hardware description.load modes">load modes</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#hardwarearchitecture" title="Hardware description.hardware architecture">hardware architecture</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#connectors" title="Hardware description.hardware architecture.connectors">connectors</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#buttons" title="Hardware description.hardware architecture.buttons">buttons</a></small><br /><a class="index indexlev2" href="#How" title="How">How</a><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#dependencies" title="How.dependencies">dependencies</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#protocol" title="How.protocol">protocol</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#PX100nbspprotocol" title="How.protocol.PX100&nbsp;protocol">PX100&nbsp;protocol</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#Atorchprotocol" title="How.protocol."Atorch" protocol">"Atorch" protocol</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#transactionexamples" title="How.protocol.transaction examples">transaction examples</a></small><br /><a class="index indexlev2" href="#Usage" title="Usage">Usage</a><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#hardwareconfiguration" title="Usage.hardware configuration">hardware configuration</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#commands" title="Usage.commands">commands</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#settings" title="Usage.settings">settings</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#miniscripts" title="Usage.miniscripts">miniscripts</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#loops" title="Usage.miniscripts.loops">loops</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#stdin" title="Usage.miniscripts.stdin">stdin</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#dataononeline" title="Usage.miniscripts.data on one line">data on one line</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#connectionpersistence" title="Usage.miniscripts.connection persistence">connection persistence</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#verbosity" title="Usage.verbosity">verbosity</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#temperatures" title="Usage.temperatures">temperatures</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#autoconfiguration" title="Usage.autoconfiguration">autoconfiguration</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev3" href="#debug" title="Usage.debug">debug</a></small><br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<small><a class="index indexlev4" href="#protocolreverseengineeringaids" title="Usage.debug.protocol reverse engineering aids">protocol reverse engineering aids</a></small><br /><a class="index indexlev2" href="#Files" title="Files">Files</a><br /><a class="index indexlev2" href="#TODO" title="TODO">TODO</a><br /></div><hr /><a name="Why"></a><h2> Why
+</h2>
+<p>
+It was necessary to control an Atorch DL24P constant-current load for some lab automation purposes.
+The stock software was useless for the&nbsp;purpose, surprise surprise.
+</p>
+<p>
+There is a&nbsp;fragmentary documentation of the&nbsp;protocol online, all over the&nbsp;Internet and over various
+code implementations of varying completeness.
+</p>
+<p>
+The device communicates over a&nbsp;standard UART at 9600&nbsp;bps, no parity, 1&nbsp;stopbit (the most common setting),
+using a&nbsp;custom packet-based protocol.
+</p>
+<p>
+The serial bus can be accessed over either a&nbsp;USB-serial converter based on CH340G chip (warning: no
+galvanic isolation!), or via Bluetooth serial interface, using a&nbsp;/dev/rfcommX port. Addition of
+wifi-accessible serial interface is also possible, using eg. the&nbsp;expedient plain
+<a class="P" href="https://www.improwis.com/projects/hw_SerialOverTCP" title="local project" target="_blank">serial-over-TCP</a> ("TasmoCOM") solution was chosen, leveraging ESP8266
+and <a class="w" href="https://en.wikipedia.org/wiki/Tasmota" title="Wikipedia link: Tasmota" target="_blank">Tasmota</a>, a&nbsp;proven cheap and opensource approach.
+</p>
+<p>
+The code is a&nbsp;variant on the&nbsp;control system for <a class="P" href="https://www.improwis.com/projects/sw_rd60" title="local project" target="_blank">RD60</a>, Riden RD60xx and RK60xx power supplies.
+</p>
+<p>
+Tested with:
+<ul><li> DL24P
+</li></ul></p>
+<hr /><a name="Hardwaredescription"></a><h2> Hardware description
+</h2>
+<a name="loadmodes"></a><h3> load modes
+</h3>
+<p>
+The device nominally supports several different load modes:
+<ul><li> CC - constant current, sinking preset current despite input voltage fluctuations
+</li><li> CR - constant resistance, behaving like a&nbsp;preset-value resistor, decreasing load with falling voltage
+</li><li> CP - constant power, increasing load with falling voltage
+</li><li> CV - constant voltage, maintaining voltage over the&nbsp;load
+</li></ul></p>
+<p>
+Only the&nbsp;CC mode is fully supported. The protocol does not allow selecting other modes, changing values for them,
+nor even querying what mode is set.
+</p>
+<p>
+The hardware in its current (2023) version looks like just slightly modified AC/DC power consumption measuring
+device, with load control tacked on it. For sensing, separate dedicated load-measuring chips are used, and the
+microcontroller communicated with them via internal UART bus. The Rx/Tx comm is naturally abysmally slow, dooming
+any closed-loop regulation involving CPU to be abysmally unstable and often useless with more dynamic source.
+</p>
+<p>
+The load itself is realized as a&nbsp;big MOSFET on an even bigger actively cooled heatsink, likely a&nbsp;surplus for
+older CPUs. The MOSFET gate is fed with voltage from an op-amp, comparing signal from a&nbsp;current-sensing resistor
+with a&nbsp;reference voltage coming from a&nbsp;RC-filtered PWM from the&nbsp;controller. This is a&nbsp;pretty good closed-loop
+regulation, bog-standard approach with minimal demands on the&nbsp;CPU; in a&nbsp;pinch, a&nbsp;potentiometer can be used
+for setting the&nbsp;reference.
+</p>
+<p>
+The advantage of using dedicated power consumption sensing chips is more reliable integration of the
+consumed energy. Which is useful for the&nbsp;device's primary purpose - testing batteries. For this use,
+the device has a&nbsp;voltage cutoff preset.
+</p>
+<a name="hardwarearchitecture"></a><h3> hardware architecture
+</h3>
+<ul><li> <a class="a" href="DL24P-loadtester-schematic.pdf" title="local link: DL24P-loadtester-schematic.pdf" target="_blank">schematics (PDF)</a> (thanks to Someone Unknown somewhere on the&nbsp;Internet)
+</li></ul><p>
+The device is built around several chips:
+<ul><li> control, user interface
+</li><ul><li> HC32F030E8PA, Arm Cortex M0+ microcontroller, 64k flash/8k RAM (possibly, chip top is sanded off)
+</li><li> color TFT LCD SPI display
+</li></ul></ul></p>
+<ul><li> communication
+</li><ul><li> CH340G USB-UART converter, non-isolated
+</li><li> bluetooth module, type can be JDY-23&nbsp;(CC2541) or some SOIC8&nbsp;single-chip Bluetooth-serial from JieLi, likely AC6329A or AC6328A, on the&nbsp;board on hand labeled BP05235-29A1
+</li></ul></ul><ul><li> data acquisition
+</li><ul><li> RN8209C, a&nbsp;utility smart meter power consumption integrator
+</li><ul><li> three sigma-delta ADCs, fully differential
+</li><li> read via internal UART at fixed 4800&nbsp;bps
+</li><ul><li> current sensing resistor on channel A, using internal amplifier
+</li><li> voltage sensing on channel C, using resistive divider
+</li><li> external 10k NTC as temperature probe on channel B
+</li></ul></ul></ul></ul><ul><li> power control
+</li><ul><li> two LM321&nbsp;in SOT23-5&nbsp;case marked A63A
+</li><li> STPS41H100CG, double Schottky diode in series with the&nbsp;MOSFET, to protect it from reverse load
+</li><li> IRFP260, a&nbsp;power N-MOSFET
+</li></ul></ul><p>
+The MOSFET is a&nbsp;switching one, abused here in linear duty. Word goes along that some sellers use fake or reused ones,
+and this component dies often. Prepare to replace it.
+</p>
+<p>
+The UART has pins available near the&nbsp;Bluetooth chip, left to right:
+<ul><li> GND (bluetooth chip pin 3)
+</li><li> Rx (bluetooth chip Tx, pin 8)
+</li><li> Tx (bluetooth chip Rx, pin 7)
+</li><li> 3.3V (bluetooth chip pin 1)
+</li></ul>This is a&nbsp;tentative place to hook up the&nbsp;wifi serial module.
+</p>
+<a name="connectors"></a><h4> connectors
+</h4>
+<p>
+On the&nbsp;left side there is a&nbsp;4-pin screw clamp, for attaching source (outer pins) and source sensing (inner pins).
+Either use a&nbsp;<a class="w" href="https://en.wikipedia.org/wiki/Kelvin_connection" title="Wikipedia link: Kelvin connection" target="_blank">Kelvin connection</a> or connect pins 1&nbsp;to 2&nbsp;and 3&nbsp;to 4&nbsp;and neglect the&nbsp;(often significant) voltage drop on the&nbsp;cables.
+</p>
+<p>
+On the&nbsp;right side there is a&nbsp;5.5/2.1mm barrel jack, connected in parallel to the&nbsp;source pins. Do not mistake for the&nbsp;other connector on the&nbsp;back.
+An adapter with a&nbsp;barrel jack and USB-mini, USB-micro and USB-C connector is often available.
+</p>
+<p>
+On the&nbsp;right side there is also the&nbsp;microUSB connector with USB-UART CH340G interface.
+</p>
+<p>
+On the&nbsp;back side there is one 5.5/2.1mm barrel jack for a&nbsp;9-to-12v power supply. This one feeds the&nbsp;internal electronics (fan, op-amps,
+3.3v linear regulator).
+</p>
+<a name="buttons"></a><h4> buttons
+</h4>
+<p>
+The unit has four buttons in a&nbsp;diamond layout.
+<ul><li> top: SETTING
+</li><ul><li> short press selects next item (cursor in the&nbsp;Is (set current) field, fields in setting mode
+</li><li> long press allows selecting mode and accessing other variables - Vcut, timer...
+</li></ul><li> left: MINUS
+</li><ul><li> decreases value under cursor
+</li></ul><li> right: PLUS
+</li><ul><li> increases value under cursor
+</li><li> long press of MINUS and PLUS together 
+</li></ul><li> bottom: START
+</li><ul><li> short press switches the&nbsp;load on or off
+</li><li> long press in OFF mode accesses settings menu (language, calibration, power limit...)
+</li></ul></ul></p>
+<hr /><a name="How"></a><h2> How
+</h2>
+<p>
+<span class="code">dl24.py</span>, a&nbsp;python-based (for portability) script, was written. The software allows both
+using a&nbsp;tty-style port and a&nbsp;raw TCP socket, with no fancy RFC2217&nbsp;support. If the&nbsp;latter is needed, URI-style
+pyserial syntax is available with the&nbsp;port.
+</p>
+<p>
+The software defines a&nbsp;hierarchy of classes:
+<ul><li> <span class="code">class LowLevelSerPort</span> - for wired /dev/ttyX ports or full virtual ports
+</li><li> <span class="code">class LowLevelTcpPort</span> - for raw TCP sockets, TasmoCOM style
+</li><li> <span class="code">class Instr_Atorch</span> - functions specific for the&nbsp;DL24P and other Atorch devices, protocol, commands
+</li><li> <span class="code">class PowerLoad</span> - command interpreter, configfile reader
+</li></ul></p>
+<a name="dependencies"></a><h3> dependencies
+</h3>
+<p>
+The software tries to minimize dependencies.
+</p>
+<p>
+The mandatory ones, and mostly standard ones, are:
+<ul><li> <span class="code">socket</span> (for TCP communication)
+</li><li> <span class="code">time</span> (for sleep)
+</li><li> <span class="code">select</span> (for nonblocking stdin reads)
+</li><li> <span class="code">struct</span> (pack/unpack, for conversion of packets to/from byte stream)
+</li></ul>The nonmandatory, imported only as needed (so the&nbsp;process would run when a&nbsp;missing dependency is not required), are:
+<ul><li> <span class="code">serial</span> (pyserial, for serial ports)
+</li><li> <span class="code">datetime</span> (for date/time settings)
+</li><li> <span class="code">json</span> (for JSON format output)
+</li></ul></p>
+<a name="protocol"></a><h3> protocol
+</h3>
+<p>
+The device communicates over a&nbsp;bidirectional serial stream. There seem to be two different protocols, mixed together:
+<ul><li> PX100&nbsp;or PX-100, older, with fixed prefix and suffix and a&nbsp;prayer for data integrity
+</li><li> a&nbsp;newer one, let's call it "Atorch", with fixed prefix and a&nbsp;checksum
+</li></ul></p>
+<a name="PX100nbspprotocol"></a><h4> PX100&nbsp;protocol
+</h4>
+<p>
+Challenge-response, master-slave protocol. The device listens and only reacts to the&nbsp;data sent.
+<ul><li> <a class="a" href="https://github.com/misdoro/Electronic_load_px100/blob/master/protocol_PX-100_2_70.md" title="remote link: https://github.com/misdoro/Electronic_load_px100/blob/master/protocol_PX-100_2_70.md" target="_blank">https://github.com/misdoro/Electronic_load_px100/blob/master/protocol_PX-100_2_70.md</a>
+</li></ul></p>
+<pre class=""> request packet format:
+
+        0xB1&nbsp;0xB2&nbsp;[cmd] [d1] [d2] 0xB6
+ on/off             01&nbsp;  xx   00&nbsp;      xx=01&nbsp;for on, 00&nbsp;for off
+ set current        02&nbsp;  xx   yy       xx=integer, yy=decimal (00..99d)
+ set cutoff v       03&nbsp;  xx   yy       ""
+ set timeout        04&nbsp;  xx   yy       xxyy as unsigned int in seconds
+ reset counters     05&nbsp;  00&nbsp;  00
+
+ command response format: a&nbsp;single byte, 0x6F (PROTO_SHORTACK)
+
+ query response:
+                  0xCA 0xCB [d1] [d2] [d3] 0xCE 0xCF
+             for cmd code
+ load enabled      10&nbsp;       00&nbsp;  00&nbsp;  xx          xx=00&nbsp;(off) or 01&nbsp;(on)
+ measured mV       11&nbsp;       xx   yy   zz          0xXXYYZZ, 24bit integer
+ measured mA       12&nbsp;       xx   yy   zz
+ timer value       13&nbsp;       hh   mm   ss
+ cap mAh           14&nbsp;       xx   yy   zz
+ cap mWh           15&nbsp;       xx   yy   zz
+ mosfet 'c         16&nbsp;       xx   yy   zz
+ preset current    17&nbsp;       xx   yy   zz          10s mA
+ preset cutoff     18&nbsp;       xx   yy   zz          10s mV
+ preset timer      19&nbsp;       hh   mm   ss
+
+ [cmd] code ranges 0x0? for command (with short response) and query (with long 7-byte response)
+
+ On invalid command there is no response, the&nbsp;command timeouts.
+</pre><a name="Atorchprotocol"></a><h4> "Atorch" protocol
+</h4>
+<p>
+More modern protocol, combining fixed-format status updates in one-second intervals and challenge-response commands
+<ul><li> <a class="a" href="https://github.com/devanlai/webvoltmeter/blob/master/REVERSE.md" title="remote link: https://github.com/devanlai/webvoltmeter/blob/master/REVERSE.md" target="_blank">https://github.com/devanlai/webvoltmeter/blob/master/REVERSE.md</a>
+</li><li> <a class="a" href="https://github.com/syssi/esphome-atorch-dl24/blob/main/docs/protocol-design.md" title="remote link: https://github.com/syssi/esphome-atorch-dl24/blob/main/docs/protocol-design.md" target="_blank">https://github.com/syssi/esphome-atorch-dl24/blob/main/docs/protocol-design.md</a>
+</li><li> <a class="a" href="https://werner.rothschopf.net/microcontroller/202204_atorch_dt24hd_power_sensor_en.htm" title="remote link: https://werner.rothschopf.net/microcontroller/202204_atorch_dt24hd_power_sensor_en.htm" target="_blank">https://werner.rothschopf.net/microcontroller/202204_atorch_dt24hd_power_sensor_en.htm</a> - incl. parser decompiled from app
+</li><li> <a class="a" href="https://www.ordinoscope.net/index.php/Electronique/Hardware/Outils/Atorch/DL24P" title="remote link: https://www.ordinoscope.net/index.php/Electronique/Hardware/Outils/Atorch/DL24P" target="_blank">https://www.ordinoscope.net/index.php/Electronique/Hardware/Outils/Atorch/DL24P</a>
+</li></ul></p>
+<p>
+The packets have a&nbsp;fixed overall structure with variable length:
+<ul><li> <span class="code">0xFF 0x55</span> - a&nbsp;fixed prefix, magic number
+</li><li> <span class="code">type</span> - packet type
+</li><ul><li> <span class="code">0x01</span> - periodic message, slave to master, 36&nbsp;bytes total
+</li><li> <span class="code">0x02</span> - reply to request, slave to master, 8&nbsp;bytes total
+</li><li> <span class="code">0x11</span> - request, master to slave, 10&nbsp;bytes total
+</li></ul><li> <span class="code">ADU</span> - device type
+</li><ul><li> <span class="code">0x01</span> - AC power consumption meter
+</li><li> <span class="code">0x02</span> - DC power consumption meter or artificial load; use for DL24
+</li><li> <span class="code">0x03</span> - DC power consumption meter for USB power analyzers/monitors
+</li></ul><li> <span class="code">payload</span> - variable length and content
+</li><ul><li> type 0x01: 31&nbsp;bytes
+</li><li> type 0x02: 3&nbsp;bytes
+</li><li> type 0x03: 5&nbsp;bytes
+</li></ul><li> <span class="code">checksum</span> - one byte, sum of bytes from (incl.) type to end of payload
+</li><ul><li> byte by byte entire packet minus first two and one last bytes, AND 0xFF, XOR 0x44
+</li><li> use result for outgoing requests, check last byte for match for incoming messages
+</li></ul></ul></p>
+<pre class=""> Atorch protocol, type 0x01: 1-per-second, 36-byte: (pfct=power factor, bk=backlight)
+                   x4&nbsp;              x8&nbsp;              xc               x10&nbsp;              x14&nbsp;              x18&nbsp;             x1c              x20
+                   4&nbsp;               8&nbsp;               12&nbsp;              16&nbsp;               20&nbsp;               24&nbsp;              28&nbsp;              32
+ [FF][55][01][02] [00][00][00] [00][00][00] [00][00][12] [00][00][00][00] [00][00][00] [00][00] [00][00] [00][17][00][00] [0A][33][3c][00] [00][00][00][E1]
+ [FF][55][01][02] [00][00][33] [00][00][00] [00][00][12] [00][00][00][00] [00][00][00] [00][00] [00][00] [00][17][00][00] [0A][33][3c][00] [00][00][00][9C]
+          t   01&nbsp; -volt*0.1?-  -milliamps-  ---power---  ----energy-----   --price?--   -freq-   -pfct-   -temp-                   bk
+          t   02&nbsp; -volt*0.1--  -milliamps-  -amphours--  ----energy-----   --price?--            -pfct-   -temp-  --hhhh---mm--ss  bk
+          t   03&nbsp; -volt*0.1?-  -milliamps-  -amphours--  ----energy-----    usbd+   usbd-   -temp-   --hhhh---mm--ss  bk
+             ADU      0.1v       0.001a       0.01Ah
+
+
+ type 0x02, reply:
+ [FF][55][02] [val0][val1][val2][val3] [checksum]
+ for a&nbsp;good command (0x32, button) the&nbsp;response is 01&nbsp;01&nbsp;00&nbsp;00
+ for a&nbsp;bad command (0x36) the&nbsp;response is 01&nbsp;03&nbsp;00&nbsp;00
+ 01&nbsp;01&nbsp;seems to be good command
+ 01&nbsp;03&nbsp;seems to be unimplemented command
+
+ sample push of ON/OFF button: (cmd=0x32, values=[0,0,0,0])
+ SEND: ff:55:11:02: 32&nbsp;:00:00:00:00&nbsp;:01
+ RECV: ff:55:02: 01:01:00:00&nbsp;:40
+
+
+ type 0x11, request:
+ [FF][55][11][ADU] [cmd] [val0][val1][val2][val3] [checksum]  - val1&nbsp;seems to be always 0x00
+
+ sample requests, as by http://bukys.eu/project/powermon/start :
+
+   Commands for UD18&nbsp;UD24&nbsp;(USB)
+     WH reset            FF 55&nbsp;11&nbsp;03&nbsp;01&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;51
+     AH reset            FF 55&nbsp;11&nbsp;03&nbsp;02&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;52
+     TIME reset          FF 55&nbsp;11&nbsp;03&nbsp;03&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;53
+     ALL reset           FF 55&nbsp;11&nbsp;03&nbsp;05&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;5d
+     SETUP Button        FF 55&nbsp;11&nbsp;03&nbsp;31&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;01
+     ENTER Button        FF 55&nbsp;11&nbsp;03&nbsp;32&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;02
+     [+] Button          FF 55&nbsp;11&nbsp;03&nbsp;33&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;03
+     [-] Button          FF 55&nbsp;11&nbsp;03&nbsp;34&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;0C
+
+  Commands for S1-B (USB)
+     WH reset            FF 55&nbsp;11&nbsp;03&nbsp;01&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;51
+     Internal relay      FF 55&nbsp;11&nbsp;03&nbsp;02&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;52
+     TIME reset          FF 55&nbsp;11&nbsp;03&nbsp;03&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;53
+</pre><a name="transactionexamples"></a><h4> transaction examples
+</h4>
+<p>
+using protocol reverse engineering commands with <span class="code">VERB:CM</span>
+<pre class=""> CMD: RAWPX100:30
+ SEND: b1:b2:30:00:00:b6
+ REPLY TIMEOUT
+ SEND: b1:b2:30:00:00:b6
+ REPLY TIMEOUT
+ SEND: b1:b2:30:00:00:b6
+ REPLY TIMEOUT
+
+ CMD: RAWPX100:01
+ SEND: b1:b2:01:00:00:b6
+ RECV: 6f
+
+ CMD: RAWPX100:10
+ SEND: b1:b2:10:00:00:b6
+ RECV: ca:cb:00:00:00:ce:cf
+
+ CMD: RAWPROTO:32
+ SEND: ff:55:11:02:32:00:00:00:00:01
+ RECV: ff:55:02:01:01:00:00:40
+
+ CMD: RAWPROTO:FF
+ SEND: ff:55:11:02:ff:00:00:00:00:56
+ RECV: ff:55:02:01:03:00:00:42
+</pre></p>
+<hr /><a name="Usage"></a><h2> Usage
+</h2>
+<pre class="preFile">Atorch DL24 artificial control
+Usage: ./dl24.py &lt;command&gt; [command]...
+Commands:
+
+  ON             enable output
+  OFF            disable output
+
+  nn.nnVCUT      set cutoff voltage
+  nn.nnMA        set output current
+  nn.nnA         set output current
+
+  QV             query actual voltage
+  QMV            query actual voltage, integer millivolts
+  QA             query actual current
+  QMA            query actual current, integer milliamps
+  QTI            query internal temperature
+  QVCUT          query cutoff voltage
+
+  QAH            query amp-hour counter
+  QMAH           query amp-hour counter in integer mAh
+  QWH            query watt-hour counter
+  QMWH           query watt-hour counter in integer mWh
+  RESET          reset energy counters
+
+  STATE[:opts]   print setting state in JSON format
+  STATEJ[:opts]  print setting state in JSON format, like opts=J
+          opts:  J=JSON, S=short (V/A only), T=show time, U=show UTC time, A=show all, B=force battery, M=minimize queries, L=listen-only
+  LISTEN[:opts[:count]]  listen to status reports, query data, handle stdin
+  LISTEN[:opts[:off]]    listen, until off
+          opts:  J=JSON, S=short (V/A only), T=show time, U=show UTC time, A=show all, B=force battery, M=minimize queries, L=listen-only
+
+  TCP=addr[:port]           set connection via TCP
+  PORT=/dev/ttyport[@baud]  set connection via serial port
+  WAIT           wait for communication from device
+  ROBUST         increase timeouts and retries
+  OFFOFF         switch output off on program exit
+  STOPOFF        stop loop on output off
+
+  STDIN          read commands from stdin
+  LOOP:[xx]      loop for xx time or endless if not specified
+  SLEEPxx        sleep for xx seconds
+  VERB[:opts]    list operations
+          opts:  P=port, C=communication, D=dataflow, M=commands
+  LINE           output the Q-queries as space-separated instead of newline-separated
+  TYPE           print detected device type
+  CFGFILE        generate config file template to stdout
+
+  RAWPROTO:xx[:xx:xx:xx:xx]   raw Atorch protocol send, cmd + 4 payloads
+  RAWPX100:xx[:xx:xx]         raw PX100 protocol send, cmd + 2 payloads
+  RAWSEND:xx[:xx:xx:...]      raw serial protocol data send
+  NORETRY                     do not retry timeouted commands
+
+For volt and amp setting, prefixing the value with + or - marks it as relative, to be added/subtracted to the current value
+Commands are executed in sequence. Writes are cached and grouped together to minimize bus transactions.
+Commands are case-insensitive.
+Command &quot;-&quot; forces a newline into output.
+</pre><a name="hardwareconfiguration"></a><h3> hardware configuration
+</h3>
+<p>
+The host:port or serport:baudrate are saved in ~/.dl24.cfg (or other name, where filename is derived from
+the command by stripping the&nbsp;.py suffix and prefixing a&nbsp;home directory and a&nbsp;dot). This variability allows
+to use several symlinks for different power supplies simultaneously used, eg. as dl24a, dl24b,...
+</p>
+<p>
+The configfile template can be generated on demand by command <span class="code">CFGFILE</span>.
+</p>
+<p>
+Directly, the&nbsp;devices may be specified as <span class="code">TCP=&lt;host&gt;[:port] </span> or <span class="code">PORT=/dev/ttyUSBx@baudrate</span>,
+eg. <span class="code">TCP=10.0.1.15:8888</span> or <span class="code">PORT=/dev/rfcomm0</span> or <span class="code">PORT=/dev/ttyUSB1</span> (default speed is 9600, cannot be changed).
+</p>
+<p>
+The PORT directive, both in command and in config, also supports the&nbsp;<a class="a" href="https://pyserial.readthedocs.io/en/latest/url_handlers.html" title="remote link: https://pyserial.readthedocs.io/en/latest/url_handlers.html" target="_blank">URL form</a>.
+</p>
+<p>
+For <span class="code">/dev/rfcomm</span> devices used with Bluetooth, a&nbsp;<a class="w" href="https://en.wikipedia.org/wiki/wait" title="Wikipedia link: wait" target="_blank">wait</a> directive is needed. The port takes its
+precious time to initialize, and waiting for first incoming data packet prevents initial timeouts.
+</p>
+<a name="commands"></a><h3> commands
+</h3>
+<p>
+The script takes a&nbsp;sequence of commands from commandline, separated by spaces. Each command is a&nbsp;single token,
+optionally containing separator characters.
+</p>
+<p>
+The commands can be a&nbsp;fixed string (<span class="code">STATE</span>, <span class="code">QV</span>, ...) or a&nbsp;prefix with value, or value with suffix (12.5<span class="code">A</span>,
+<span class="code">SLEEP</span>1.5, <span class="code">Q</span>VCUT...)
+</p>
+<p>
+Q-commands can be used to directly access the&nbsp;measured or set values:
+<ul><li> <span class="code">QV</span>, <span class="code">QA</span> - for querying output voltage/amperage
+</li><li> <span class="code">QMV</span>, <span class="code">QMA</span> - same, but integer value in millivolts/milliamps instead of float, for bash comparisons
+</li></ul></p>
+<a name="settings"></a><h3> settings
+</h3>
+<p>
+The load current and voltage cutoff can be set with suffix-based commands.
+For the&nbsp;value of 1.23, the&nbsp;commands are
+<ul><li> <span class="code">1.23A</span> - set load current
+</li><li> <span class="code">1230MA</span> - set load current in milliamps
+</li><li> <span class="code">1.23VCUT</span> - set voltage cutoff
+</li><li> <span class="code">+1.23A</span> - increase load current
+</li><li> <span class="code">-1.23A</span> - decrease load current
+</li><li> <span class="code">+1230MA</span> - increase load current in milliamps
+</li></ul></p>
+<p>
+Voltage cutoff does not support relative values, absolute shall be used.
+</p>
+<a name="miniscripts"></a><h3> miniscripts
+</h3>
+<p>
+The commands are executed in order.
+</p>
+<ul><li> set voltage cutoff and current, enable output
+</li><ul><li> <span class="code">dl24.py 10.5vcut 550ma on</span>
+</li></ul><li> toggle output, wait half second, show state
+</li><ul><li> <span class="code">dl24.py toggle sleep0.5 state</span>
+</li></ul><li> set output to 5&nbsp;amps and enable, wait a&nbsp;second, increase by an amo, wait a&nbsp;second, increase by another two amps, show state and power off
+</li><ul><li> <span class="code">dl24.py on 5a sleep1 +1a sleep1 +2a sleep0.5 state off</span>
+</li></ul><li> show input voltage and current
+</li><ul><li> <span class="code">dl24.py qv qa</span>
+</li></ul><li> show input voltage in millivolts and current in milliamps, space-separated
+</li><ul><li> <span class="code">dl24.py qmv qma | tr '\n' ' '</span>
+</li></ul><li> disable output, set cutoff voltage and current, enable output
+</li><ul><li> <span class="code">dl24.py off 4.9vcut 1250ma on</span>
+</li></ul></ul><a name="loops"></a><h4> loops
+</h4>
+<p>
+The <span class="code">LOOP:</span> statement can be used for repeating of commands. The subsequent command set is repeated forever, or for specified number of times.
+</p>
+<ul><li> show status in JSON format, forever
+</li><ul><li> <span class="code">dl24.py loop: jstate</span>
+</li></ul><li> ramp current by 20mA over time, from 0&nbsp;to 1A, watch status with timestamps:
+</li><ul><li> <span class="code">dl24.py 0a on loop:50 +20ma sleep1 stat:jt</span>
+</li></ul></ul><a name="stdin"></a><h4> stdin
+</h4>
+<p>
+The commands can be sent from another script, via stdin. The <span class="code">STDIN</span> statement has to be the&nbsp;last on the&nbsp;command line, everything after it is ignored.
+<ul><li> enable output, take file with currents, send in one per second, then disable output
+</li><ul><li> <span class="code">cat file.txt | while read x; do echo $x; sleep 1; done | ./dl24.py on stdin; ./dl24.py off</span>
+</li></ul></ul></p>
+<a name="dataononeline"></a><h4> data on one line
+</h4>
+<p>
+The <span class="code">LINE</span> command sets the&nbsp;separator character between Q-values from default newline to a&nbsp;space. Groups of values then can be sent as single lines.
+<ul><li> check every 5&nbsp;seconds, send millivolts, milliamps, integrated amp-hours and watt-hours
+</li><ul><li> <span class="code">dl24.py line loop: qmv qma qah qwh sleep5</span>
+</li></ul></ul></p>
+<a name="connectionpersistence"></a><h4> connection persistence
+</h4>
+<p>
+The connection to the&nbsp;port is opened when first needed, then kept open until the&nbsp;process closes.
+</p>
+<p>
+In some cases this may be detrimental to reliability (connection fail crashes the&nbsp;process). Running it anew each time may be beneficial then.
+</p>
+<a name="verbosity"></a><h3> verbosity
+</h3>
+<p>
+To see the&nbsp;port/socket opening/closing, and the&nbsp;bus transactions dumped in hex, use <span class="code">VERB</span> as the&nbsp;first command.
+</p>
+<div class="cmd">./dl24.py verb:pc state</div><pre class="">CONFIGFILE:filename: /root/.dl24.cfg
+CONFIGFILE:FAIL: [Errno 2] No such file or directory: '/root/.dl24.cfg'
+SERPORT:connecting to /dev/rfcomm0&nbsp;@ 9600
+SERPORT:connected
+waiting for incoming data
+RECV: ff:55:01:02:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:17:00:00:00:04:3c:00:00:00:00:1e
+SEND: b1:b2:10:00:00:b6
+RECV: ca:cb:00:00:01:ce:cf
+SEND: b1:b2:11:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:12:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:14:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:15:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:17:00:00:b6
+RECV: ca:cb:00:00:63:ce:cf
+SEND: b1:b2:18:00:00:b6
+RECV: ca:cb:00:00:00:ce:cf
+SEND: b1:b2:16:00:00:b6
+RECV: ca:cb:00:00:17:ce:cf
+SERPORT:closed
+</pre><a name="temperatures"></a><h3> temperatures
+</h3>
+<p>
+The board has a&nbsp;connector for an external NTC probe temperature. The firmware does not support querying it as of late 2023.
+</p>
+<a name="autoconfiguration"></a><h3> autoconfiguration
+</h3>
+<p>
+There is no way to query the&nbsp;specific device type.
+There is a&nbsp;hint in the&nbsp;protocol, the&nbsp;ADU field in the&nbsp;status packet. It can have different values describing the
+packet format, the&nbsp;field meanings; <span class="code">1</span> is for AC sensors, <span class="code">2</span> for DC sensors, <span class="code">3</span> for USB DC sensors.
+</p>
+<p>
+The <span class="code">TYPE</span> command will show this value.
+</p>
+<p>
+DT24&nbsp;devices are of type 2.
+</p>
+<a name="debug"></a><h3> debug
+</h3>
+<p>
+The verbose mode, <span class="code">VERB</span>, provides access to several kinds of data:
+<ul><li> verb:<span class="code">P</span> for port-related behavior (open/close)
+</li><li> verb:<span class="code">C</span> for communication data
+</li><li> verb:<span class="code">D</span> for data flow (less verbose comm)
+</li><li> verb:<span class="code">M</span> for coMmands
+</li></ul></p>
+<a name="protocolreverseengineeringaids"></a><h4> protocol reverse engineering aids
+</h4>
+<p>
+For understanding the&nbsp;current, and checking the&nbsp;future. Best used with <span class="code">VERB:PCM</span> to see the&nbsp;response.
+<ul><li> <span class="code">RAWPROTO:XXXXXXXXXX</span> - send raw bytes via Atorch protocol, command + 4&nbsp;payloads in hex, auto-pads with zeroes
+</li><li> <span class="code">RAWPX100:XXXXXX</span> - send raw bytes via PX100&nbsp;protocol, command + 2&nbsp;payloads in hex, auto-pads with zeroes
+</li><li> <span class="code">RAWSEND:XX....</span> - send raw bytes directly to port
+</li><li> <span class="code">NORETRY</span> - do not retry timeouted commands, for PX100&nbsp;protocol to speed up reaction and reduce clutter
+</li></ul></p>
+<p>
+Example of <span class="code">RAWSEND</span> to elicit response from a&nbsp;UM34C power monitor (protocol (described at <a class="a" href="https://sigrok.org/wiki/RDTech_UM_series" title="remote link: https://sigrok.org/wiki/RDTech_UM_series" target="_blank">Sigrok wiki</a>
+unsupported by this software, hence the&nbsp;discard: messages on the&nbsp;response). 0xF0&nbsp;requests the&nbsp;data packet.
+<pre class="">CMD: VERB:PCM
+CMD: RAWSEND:F0
+SEND: f0
+RECV: 0d:4c:01:f8:00:a5:00:00:03:3f:00:18:00:4c:00:00
+discard: 0d 4c 01&nbsp;f8&nbsp;00&nbsp;a5&nbsp;00&nbsp;00&nbsp;03&nbsp;3f 00&nbsp;18&nbsp;00&nbsp;4c 00&nbsp;00
+RECV: 00:00:21:6f:00:00:a7:a9:00:01:70:0b:00:07:34:e2:00:01:86:9f:00:0c:2c:22:00:00:07:3d:00:00:22:e2:00:00:00:00:00:00:00:00:00:00:00:00
+discard: 00&nbsp;00&nbsp;21&nbsp;6f 00&nbsp;00&nbsp;a7&nbsp;a9&nbsp;00&nbsp;01&nbsp;70&nbsp;0b 00&nbsp;07&nbsp;34&nbsp;e2&nbsp;00&nbsp;01&nbsp;86&nbsp;9f 00&nbsp;0c 2c 22&nbsp;00&nbsp;00&nbsp;07&nbsp;3d 00&nbsp;00&nbsp;22&nbsp;e2&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00
+RECV: 00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:01:00:00:00:08:00:00:04:2c:00:00:14:d4:00:00:4d:ef:00:01:87:d9:00:75:00:75:00:08:00:00:21:6f
+discard: 00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;00&nbsp;01&nbsp;00&nbsp;00&nbsp;00&nbsp;08&nbsp;00&nbsp;00&nbsp;04&nbsp;2c 00&nbsp;00&nbsp;14&nbsp;d4&nbsp;00&nbsp;00&nbsp;4d ef 00&nbsp;01&nbsp;87&nbsp;d9&nbsp;00&nbsp;75&nbsp;00&nbsp;75&nbsp;00&nbsp;08&nbsp;00&nbsp;00&nbsp;21&nbsp;6f
+RECV: 00:00:a7:a9:00:02:00:01:6a:41:00:01:00:00:00:04:00:00:01:31:00:00:97:07
+discard: 00&nbsp;00&nbsp;a7&nbsp;a9&nbsp;00&nbsp;02&nbsp;00&nbsp;01&nbsp;6a 41&nbsp;00&nbsp;01&nbsp;00&nbsp;00&nbsp;00&nbsp;04&nbsp;00&nbsp;00&nbsp;01&nbsp;31&nbsp;00&nbsp;00&nbsp;97&nbsp;07
+REPLY TIMEOUT
+</pre></p>
+<hr /><a name="Files"></a><h2> Files
+</h2>
+<ul><li> <b><a class="F" href="dl24.py" title="local file">dl24.py</a></b> - code itself
+</li></ul><hr /><a name="TODO"></a><h2> TODO
+</h2>
+<ul><li> better windows compatibility
+</li><li> tests on some USB power meters
+</li><li> better pictures
+</li><li> <a class="w" href="https://en.wikipedia.org/wiki/Standard_Commands_for_Programmable_Instruments" title="Wikipedia link: Standard Commands for Programmable Instruments" target="_blank">SCPI</a> emulation/gateway
+</li><li> hardware mods
+</li><ul><li> more robust MOSFET, reverse-protection diodes
+</li><li> MOSFET gate protection with zener/transil
+</li><li> isolated 5-12v converter for powering from standard 5v usb, galvanically isolated from the&nbsp;rest
+</li><li> maybe galv isolation of the&nbsp;USB, like RD60xx have; unlike that one, a&nbsp;pair of lousy optocouplers will do here as 9k6&nbsp;is slow
+</li></ul></ul><!-- feedback -->
+<!-- /feedback -->
+</body>
+</html>
